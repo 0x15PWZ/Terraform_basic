@@ -1,0 +1,94 @@
+Day 1 - Terraform Basics 
+________________________
+🧱 Terraform ဆိုတာဘာလဲ?
+Terraform ဟာ Infrastructure as Code (IaC) tool တစ်ခုပဲဖြစ်ပြီး, Cloud Infrastructure (AWS, Azure, GCP) တွေကို code နဲ့ automate လုပ်နိုင်စေပါတယ်။
+HashiCorp ကထုတ်ထားတဲ့ open-source tool တစ်ခုပဲဖြစ်ပါတယ်။
+
+✅ Terraform သုံးရတဲ့ အကြောင်းအရာတွေ
+___________________________________
+Infrastructure as Code (IaC) – Cloud resource တွေကို YAML/JSON နဲ့မဟုတ်ပဲ .tf (HCL – HashiCorp Configuration Language) နဲ့ရေးတယ်။
+Provisioning Automation – EC2, VPC, S3, RDS, etc. တို့ကို Code နဲ့ automate တင်နိုင်တယ်။
+Multi-cloud Support – AWS, Azure, GCP တို့ကို support လုပ်တယ်။
+Plan & Apply Workflow – Terraform plan ရေးပြီး resource တွေ apply လုပ်တယ်။
+State Management – Infrastructure ကို .tfstate file နဲ့ track လုပ်တယ်။
+
+🛠️ Terraform Installation
+___________________________
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update
+sudo apt install terraform
+
+📁 Terraform Project Structure
+______________________________
+terraform-demo/
+├── main.tf         # Main Terraform configuration
+├── variables.tf    # Variable definitions
+├── outputs.tf      # Outputs (e.g. instance IP)
+└── terraform.tfvars # Variable values
+
+🧪 Terraform CLI Commands
+________________________
+Command				Description
+_______________________________________________________________________________
+terraform init			Project အတွက် Terraform ကို initialize လုပ်တယ်
+terraform plan			ဘာတွေ create မလဲ ပြမယ် (preview only)
+terraform apply			Code နဲ့ define ထားတဲ့ resource တွေကို create လုပ်မယ်
+terraform destroy		Provisioned resources တွေကို delete လုပ်မယ်
+
+✅ Today’s Goal
+_______________
+Terraform install ပြီး verify လုပ်ခြင်း
+S3 bucket တစ်ခု simple .tf file နဲ့ create လုပ်ခြင်း
+terraform init, plan, apply, destroy commands တွေသုံးပြီးလုပ်ကြည့်ခြင်း
+
+📘 Example - Create AWS S3 Bucket
+__________________________________
+main.tf
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "my_bucket" {
+  bucket = "tharphyoe-s3-demo-bucket"
+}
+
+
+terraform init
+terraform plan
+terraform apply
+
+
+AWS S3 တွင် Create လုပ်ထားသော buckets များကို ကြည့်ရန် အောက်ပါနည်းလမ်းများရှိပါတယ်။ သင်ဟာ AWS CLI သုံးနေတယ်ဆိုလျှင် CLI မှာလည်း ကြည့်လို့ရပါတယ်။
+
+✅ Method 1: AWS Management Console မှာကြည့်ခြင်း
+______________________________________________
+AWS Console ကို ဝင်ပါ 👉 https://s3.console.aws.amazon.com/s3
+Buckets tab မှာ သင် create လုပ်ထားတဲ့ bucket များအားလုံးကို မြင်နိုင်ပါတယ်။
+
+✅ Method 2: AWS CLI မှာကြည့်ခြင်း
+_________________________________
+
+aws s3 ls
+
+ဥပမာ Output:
+2024-10-12 15:22:17 my-first-bucket
+2024-11-03 09:00:00 terraform-demo-bucket
+
+မှတ်ချက်:
+ဤ command သည် current IAM user မှ access ရရှိနိုင်သော buckets များကိုပဲ ပြပါမည်။
+သင့် AWS CLI ကို aws configure ဖြင့် credentials ထည့်ပြီး configure ပြီးသားဖြစ်ဖို့ လိုအပ်ပါတယ်။
+
+✅ Method 3: Using Terraform (if you created via Terraform)
+____________________________________________________________
+Terraform သုံးပြီး create လုပ်ထားလျှင် အောက်ပါ command ဖြင့် state ထဲက bucket ကိုကြည့်နိုင်သည်။
+
+terraform state list
+Output:
+aws_s3_bucket.my_bucket
+ပြီးတော့:
+terraform state show aws_s3_bucket.my_bucket
+
+==========================================================================================//

@@ -1,0 +1,398 @@
+
+Day 7- build a Private + Public Subnet VPC Setup using Terraform 
+________________________________________________________________
+
+A foundational real-world AWS architecture. This helps you deploy apps (in private subnet) while accessing them securely via a Bastion Host (in public subnet).
+
+✅ Objective:
+_____________
+🏗️ VPC with:
+1 Public Subnet (Bastion Host & NAT Gateway)
+1 Private Subnet (EC2 App Server)
+🌐 Public subnet has Internet access
+🔐 Private subnet has no direct access to internet
+🔁 NAT Gateway allows the private EC2 to reach the internet (for updates etc.)
+
+📁 Folder Structure
+___________________
+terraform-vpc-2tier/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+└── provider.tf
+
+📄 provider.tf
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+📄 variables.tf
+
+variable "vpc_cidr"        { default = "10.0.0.0/16" }
+variable "public_subnet"   { default = "10.0.1.0/24" }
+variable "private_subnet_1a" { default = "10.0.2.0/24" }
+variable "private_subnet_1b" { default = "10.0.3.0/24" }
+variable "ami_id"          { default = "ami-0c02fb55956c7d316" }
+variable "instance_type"   { default = "t2.micro" }
+
+📄 main.tf (Step-by-step explained)
+
+1️⃣ Create VPC, IGW, and Subnets
+
+resource "aws_vpc" "main" {
+  cidr_block = var.vpc_cidr
+  tags = { Name = "my-vpc" }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet
+  map_public_ip_on_launch = true
+  availability_zone       = "us-east-1a"
+  tags = { Name = "public-subnet" }
+}
+
+resource "aws_subnet" "private_1a" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_1a
+  availability_zone = "us-east-1a"
+  tags = { Name = "private-subnet-1a" }
+}
+
+resource "aws_subnet" "private_1b" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_1b
+  availability_zone = "us-east-1b"
+  tags = { Name = "private-subnet-1b" }
+}
+
+2️⃣ NAT Gateway (for private subnet internet access)
+
+resource "aws_eip" "nat_eip" {
+  tags = {
+    Name = "NAT EIP"
+  }
+}
+
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public.id
+}
+
+3️⃣ Route Tables
+
+# Public Route Table
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+# Private Route Table (with NAT)
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat.id
+  }
+}
+
+resource "aws_route_table_association" "private_assoc" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
+
+4️⃣ Security Groups
+
+# Bastion Host SG
+resource "aws_security_group" "bastion_sg" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "bastion-sg" }
+}
+
+# Private EC2 SG (only allows SSH from Bastion)
+resource "aws_security_group" "private_sg" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "private-ec2-sg" }
+}
+
+5️⃣ EC2 Instances
+
+# Public EC2 – Bastion
+resource "aws_instance" "bastion" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.bastion_sg.id]
+  key_name               = "your-key"  # replace with your key name
+
+  tags = { Name = "Bastion-Host" }
+}
+
+🧪 How to Find Available Key Pairs via AWS CLI
+______________________________________________
+If you have AWS CLI installed and configured: aws ec2 describe-key-pairs --query 'KeyPairs[*].KeyName'
+
+🧹 Optional: Automatically Create Key Pair via Terraform
+_______________________________________________________
+If you want to manage your key in Terraform:
+
+resource "tls_private_key" "my_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "generated_key" {
+  key_name   = "terraform-key"
+  public_key = tls_private_key.my_key.public_key_openssh
+}
+Then use this in your EC2 instance:
+
+key_name = aws_key_pair.generated_key.key_name
+
+⚠️ You also need to save the private key locally if you want to SSH.
+
+
+# Private EC2 – App Server
+resource "aws_instance" "private" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.private.id
+  vpc_security_group_ids = [aws_security_group.private_sg.id]
+  key_name               = "your-key"
+
+  tags = { Name = "Private-App-Server" }
+}
+
+📄 outputs.tf
+
+output "bastion_public_ip" {
+  value = aws_instance.bastion.public_ip
+}
+
+🧪 Deploy and Test
+__________________
+
+terraform init
+terraform plan
+terraform apply
+
+After deployment:
+
+SSH into Bastion: ssh -i your-key.pem ec2-user@<Bastion_Public_IP>
+
+
+From Bastion, SSH into Private EC2:ssh ec2-user@<Private_IP_of_Private_EC2>
+
+✅ What You Learned
+____________________
+Component	Role
+________________________________________________________
+VPC/Subnets	Network Isolation
+NAT Gateway	Private EC2 ↔ Internet (outbound only)
+Route Tables	Proper traffic flow setup
+Bastion Host	Secure jump point for access
+Security Groups	Limit access with fine control
+
+_______________________________________________________________________________________________________________
+
+
+  Add an Amazon RDS (MySQL) database into the private subnet of your existing VPC setup using Terraform.
+ ______________________________________________________________________________________________________________
+
+🎯 Objective
+____________
+Launch an RDS MySQL instance inside the private subnet.
+Ensure it’s not publicly accessible.
+Allow only EC2 inside the private subnet to access the DB.
+Automatically create a DB subnet group and security group for the RDS instance.
+
+✅ Step-by-Step: Add RDS to Your Setup
+
+You already have:
+
+VPC
+Public + Private subnets
+Bastion + Private EC2
+NAT Gateway for private subnet internet access
+
+Let’s extend with RDS now.
+
+📁 Structure
+
+Assume you're still working in your existing project terraform-vpc-2tier/
+You’ll add the following to your existing Terraform files.
+
+📄 variables.tf (Add new variables)
+
+variable "db_name"        { default = "mydb" }
+variable "db_username"    { default = "admin" }
+variable "db_password"    { default = "StrongPassword123!" }
+variable "db_instance_class" { default = "db.t3.micro" }
+
+📄 main.tf (Append this to the existing file)
+
+🔒 RDS Security Group (Only allow access from private EC2 SG)
+
+resource "aws_security_group" "rds_sg" {
+  name   = "rds-security-group"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.private_sg.id]  # Allow private EC2 only
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "rds-sg"
+  }
+}
+
+🧱 DB Subnet Group (Use only private subnet)
+
+resource "aws_db_subnet_group" "private_db_subnet_group" {
+  name       = "private-db-subnet-group"
+  subnet_ids = [aws_subnet.private_1a.id, aws_subnet.private_1b.id]
+
+  tags = {
+    Name = "Private DB Subnet Group"
+  }
+}
+
+🗄️ RDS Instance (MySQL)
+
+resource "aws_db_instance" "mydb" {
+  identifier              = "my-private-db"
+  engine                  = "mysql"
+  engine_version          = "8.0"
+  instance_class          = var.db_instance_class
+  allocated_storage       = 20
+  username                = var.db_username
+  password                = var.db_password
+  db_subnet_group_name    = aws_db_subnet_group.private_db_subnet_group.name
+  vpc_security_group_ids  = [aws_security_group.rds_sg.id]
+  skip_final_snapshot     = true
+  publicly_accessible     = false
+  multi_az                = false
+}
+
+📄 outputs.tf (Optional: Output RDS endpoint)
+
+output "rds_endpoint" {
+  value = aws_db_instance.mydb.endpoint
+}
+
+To check if a subnet already exists using the AWS CLI, you can use the following command:
+__________________________________________________________________________________________
+🔍 1. List All Subnets in Your Region
+
+aws ec2 describe-subnets --query "Subnets[*].{ID:SubnetId,CIDR:CidrBlock,VPC:VpcId,AZ:AvailabilityZone,Name:Tags[?Key=='Name']|[0].Value}" --output table
+
+This will give you a nicely formatted table like:
+
+|      ID        |    CIDR     |     VPC      |     AZ     |     Name      |
+|----------------|-------------|--------------|------------|---------------|
+| subnet-abc123  | 10.0.2.0/24 | vpc-xyz789   | us-east-1a | private-1a    |
+| subnet-def456  | 10.0.3.0/24 | vpc-xyz789   | us-east-1b | private-1b    |
+
+🔍 2. Filter by CIDR Block
+__________________________
+To check if a specific CIDR block exists (e.g., 10.0.2.0/24):
+
+aws ec2 describe-subnets \
+  --filters "Name=cidr-block,Values=10.0.2.0/24" \
+  --query "Subnets[*].{ID:SubnetId,AZ:AvailabilityZone,VPC:VpcId}" \
+  --output table
+
+🔍 3. Filter by VPC (Optional)
+______________________________
+To narrow it down to a specific VPC:
+
+aws ec2 describe-subnets \
+  --filters "Name=cidr-block,Values=10.0.2.0/24" "Name=vpc-id,Values=vpc-xxxxxxxx" \
+  --query "Subnets[*].{ID:SubnetId,AZ:AvailabilityZone}" \
+  --output table
+
+You can get your VPC ID with: aws ec2 describe-vpcs --query "Vpcs[*].{ID:VpcId,CIDR:CidrBlock}" --output table
+
+🚀 Deploy
+_________
+From inside your terraform-vpc-2tier folder:
+
+terraform init
+terraform plan
+terraform apply
+⚠️ Wait ~10 mins — RDS takes time to provision.
+
+✅ After Deployment
+
+SSH to Bastion Host
+From Bastion, SSH to private EC2
+On private EC2: mysql -h <rds_endpoint> -u admin -p
+# Enter password: StrongPassword123!
+
+✅ You’re connected to your private MySQL RDS!
+
+🧠 Tips
+_______
+Feature				Why It Matters
+_________________________________________________________________________
+Private Subnet Only		RDS is protected from the public internet
+NAT Gateway			Allows EC2 to do apt, yum, etc.
+RDS SG ↔ EC2 SG		Only private EC2 can reach RDS (TCP 3306)
+Bastion Host			Access gateway for SSH from your PC
+
+========================================================================================================//

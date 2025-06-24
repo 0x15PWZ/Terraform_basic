@@ -1,0 +1,186 @@
+
+ Day 6 – Terraform with AWS VPC, Subnet, and EC2 Deployment
+ ___________________________________________________________
+
+➡️ Goal: Learn how to use Terraform to create a Virtual Private Cloud (VPC) with subnets, route tables, internet gateway, and launch an EC2 instance inside it.
+
+🧱 Project Structure
+____________________
+terraform-vpc-ec2/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+└── provider.tf
+
+🔧 Step-by-Step Setup
+_______________________
+📁 provider.tf – AWS Setup
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+📁 variables.tf – Input Variables
+
+variable "vpc_cidr" {
+  default = "10.0.0.0/16"
+}
+
+variable "subnet_cidr" {
+  default = "10.0.1.0/24"
+}
+
+variable "ami_id" {
+  default = "ami-0c02fb55956c7d316"  # Amazon Linux 2 for us-east-1
+}
+
+variable "instance_type" {
+  default = "t2.micro"
+}
+
+📁 main.tf – Full Network and EC2 Setup
+
+# VPC
+resource "aws_vpc" "main_vpc" {
+  cidr_block = var.vpc_cidr
+
+  tags = {
+    Name = "main-vpc"
+  }
+}
+
+# Subnet
+resource "aws_subnet" "main_subnet" {
+  vpc_id            = aws_vpc.main_vpc.id
+  cidr_block        = var.subnet_cidr
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "main-subnet"
+  }
+}
+
+# Internet Gateway
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main_vpc.id
+
+  tags = {
+    Name = "main-igw"
+  }
+}
+
+# Route Table
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = {
+    Name = "public-rt"
+  }
+}
+
+# Associate Subnet with Route Table
+resource "aws_route_table_association" "subnet_association" {
+  subnet_id      = aws_subnet.main_subnet.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+# Security Group for SSH, HTTP and HTTPS
+resource "aws_security_group" "web_sg" {
+  name        = "web-sg"
+  description = "Allow SSH, HTTP and HTTPS"
+  vpc_id      = aws_vpc.main_vpc.id
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "web-sg"
+  }
+}
+
+# EC2 Instance
+resource "aws_instance" "web" {
+  ami           = var.ami_id
+  instance_type = var.instance_type
+  subnet_id     = aws_subnet.main_subnet.id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              yum update -y
+              yum install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              echo "Deployed via Terraform in VPC!" > /var/www/html/index.html
+              EOF
+
+  tags = {
+    Name = "Terraform-EC2"
+  }
+}
+
+📁 outputs.tf – Show Public IP
+
+output "ec2_public_ip" {
+  value = aws_instance.web.public_ip
+}
+
+🚀 Run the Commands
+_________________
+terraform init
+terraform validate
+terraform plan
+terraform apply
+
+✅ What You'll Learn Today
+__________________________
+Resource			Purpose
+_______________________________________________________________
+aws_vpc				Creates custom private network
+aws_subnet			Subnet within the VPC
+aws_igw				Internet Gateway for internet
+aws_route_table			Allows outbound traffic
+aws_sg				Security group for ports
+aws_instance			EC2 deployed in private network
+
+🌐 Test the Result
+__________________
+Copy the EC2 Public IP from the output
+Visit it in your browser — you should see:
+
+Deployed via Terraform in VPC!
+
+===================================================================================================//

@@ -1,0 +1,109 @@
+Day 4-Terraform Modules & Best Practices 
+________________________________________
+📦 Terraform Modules ဆိုတာဘာလဲ?
+________________________________
+Module ဆိုတာကတော့ Terraform မှာ reusable block of code တစ်ခုပါ။
+သူ့ကို အသုံးပြုဖို့အတွက် သီးသန့် folder တစ်ခုဖန်တီးပြီး သူ့ထဲမှာ .tf ဖိုင်တွေရှိပါတယ်။
+Module = inputs (variables) + resources + outputs
+
+🧱 Why Use Modules?
+__________________
+✅ Code ကို Reuse လုပ်နိုင်တယ်
+✅ Organization လုပ်ထားလို့ ပိုအဆင်ပြေတယ်
+✅ Team collaboration မှာ အထောက်အကူဖြစ်တယ်
+✅ Maintenance လွယ်တယ်
+
+🛠 Module Folder Structure
+__________________________
+terraform-demo/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+└── modules/
+    └── s3_bucket/
+        ├── main.tf
+        ├── variables.tf
+        └── outputs.tf
+        
+📘 Step-by-Step - Module တစ်ခုဖန်တီးခြင်း
+____________________________________
+✅ 1. Module ဖန်တီးခြင်း
+📁 modules/s3_bucket/main.tf
+
+resource "aws_s3_bucket" "this" {
+  bucket = var.bucket_name
+}
+
+📁 modules/s3_bucket/variables.tf
+
+variable "bucket_name" {
+  description = "S3 bucket name"
+  type        = string
+}
+
+📁 modules/s3_bucket/outputs.tf
+
+output "bucket_name" {
+  value = aws_s3_bucket.this.id
+}
+
+✅ 2. Main Configuration မှာ Module ကို ခေါ်သုံးခြင်း
+📁 main.tf
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+module "my_bucket" {
+  source      = "./modules/s3_bucket"
+  bucket_name = "my-terraform-module-bucket"
+}
+
+📁 outputs.tf
+
+output "my_bucket_name" {
+  value = module.my_bucket.bucket_name
+}
+
+💡 Then Run:
+
+terraform init
+terraform plan
+terraform apply
+
+✅ Best Practices for Terraform
+_______________________________
+Best Practice				Description
+________________________________________________________________________________________________
+🔁 Use Modules				Reuse resources across environments
+📁 Separate files			Use main.tf, variables.tf, outputs.tf separately
+🔐 Don’t commit secrets		.tfstate or *.auto.tfvars with secrets shouldn’t be pushed to Git
+🧪 Use terraform plan			Always plan before apply
+📦 Use Remote State			For team collaboration (S3 + DynamoDB for locking)
+📄 Write meaningful names		Use clear variable and module names
+📚 Document				Add comments, descriptions for variables and outputs
+
+✅ Example Use Case
+_________________
+မိမိမှာ environments (dev, prod, staging) ၃ ခုရှိတယ်ဆိုပါစို့။ Module တစ်ခုဖန်တီးပြီး အဲ့ environments ၃ ခုအတွက် module တစ်ခုစီသုံးလို့ရတယ်။
+
+module "dev_bucket" {
+  source      = "./modules/s3_bucket"
+  bucket_name = "dev-bucket"
+}
+
+module "prod_bucket" {
+  source      = "./modules/s3_bucket"
+  bucket_name = "prod-bucket"
+}
+
+📌 Summary
+__________
+
+✅ Modules help reuse Terraform code
+✅ Keep code modular and clean
+✅ Follow best practices like separating files and using remote state
+✅ Output useful resource info for easy access
+
+========================================================================================================//
+

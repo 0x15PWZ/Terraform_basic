@@ -1,0 +1,84 @@
+ Day 3 – Terraform State and Output 
+ __________________________________
+
+📦 Terraform State ဆိုတာဘာလဲ?
+Terraform ဟာ infrastructure ဖန်တီးပြီးတာနဲ့ ဖန်တီးထားတဲ့ resource တွေရဲ့ အခြေအနေ (state) ကို .tfstate ဆိုတဲ့ ဖိုင်ထဲမှာ သိမ်းထားပါတယ်။
+
+🗂️ terraform.tfstate ဆိုတဲ့ဖိုင်က:
+ကိုယ်ဖန်တီးထားတဲ့ resource တွေရဲ့ metadata (ARN, ID, etc.)
+Infrastructure ရဲ့ current status
+Next time apply လုပ်တဲ့အချိန်မှာ compare လုပ်ဖို့ အရေးကြီးတယ်
+
+📁 ဖိုင် example:
+
+json
+Copy
+Edit
+{
+  "resources": [
+    {
+      "type": "aws_s3_bucket",
+      "name": "my_bucket",
+      "instances": [
+        {
+          "attributes": {
+            "bucket": "my-terraform-bucket",
+            ...
+          }
+        }
+      ]
+    }
+  ]
+}
+📌 အရေးကြီးချက်:
+
+terraform.tfstate ဖိုင်ကို git မှာ push မလုပ်ဘဲ အရေးကြီးသော secret file တစ်ခုပင်ဖြစ်သည်။
+
+🧪 Terraform State Command
+__________________________
+Command					အသုံး
+________________________________________________
+terraform show				current state ပြမယ်
+terraform state list			ဖန်တီးထားတဲ့ resource တွေ ရှာမယ်
+terraform state show <resource>		တစ်ခုချင်းစီ details ပြမယ်
+
+ဥပမာ:
+
+terraform state list
+terraform state show aws_s3_bucket.my_bucket
+
+📤 Terraform Output
+____________________
+Terraform မှာ resource ဖန်တီးပြီးတဲ့အခါ အချို့သော value (ARN, IP, Name, etc.) ကို output အနေနဲ့ ကြည့်ချင်တတ်ပါတယ်။
+
+📄 outputs.tf ဖိုင်အတွင်း:
+
+output "bucket_name" {
+  value = aws_s3_bucket.my_bucket.id
+  description = "The name of the bucket"
+}
+
+🔎 ပြီးရင် command ထဲမှာ output ကြည့်မယ်:
+
+terraform apply
+terraform output
+
+bucket_name = "my-terraform-bucket"
+
+🧩 Summary Table
+_________________
+Topic			Description
+_________________________________________________________
+.tfstate file		Terraform ရဲ့ state ကို သိမ်းထားတယ်
+terraform state list	ဖန်တီးထားတဲ့ resource တွေဖော်ပြတယ်
+Output			Resource တန်ဖိုးကို terminal မှာပြမယ်
+
+✅ Practice Idea
+_______________
+S3 bucket တစ်ခုဖန်တီးပြီးနောက်မှာ
+.tfstate file ကိုကြည့်ပါ
+terraform output ကိုအသုံးပြုပါ
+resource name ကို output အနေနဲ့ display လုပ်ပါ
+
+==================================================================================
+
